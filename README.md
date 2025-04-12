@@ -1,6 +1,9 @@
 # csc394Spring2025
 
-## Week 1 - Test Repo
+## Homework Repo
 
-### Hello, World!
+### Week 1 -
+Created Repo - Hello, World!
 
+### Week 2 -
+Created 3 Example API endpoints.

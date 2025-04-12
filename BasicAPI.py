@@ -1,5 +1,6 @@
 # Tim West
 # HW2 - API
+# 3 Example endpoints - Documents, Users, Annotations
 
 from fastapi import FastAPI
 
