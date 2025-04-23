@@ -1,8 +1,11 @@
 # Tim West
 # HW2 - API
+# HW3 - External API Call
 # 3 Example endpoints - Documents, Users, Annotations
 
 from fastapi import FastAPI
+import requests
+import random
 
 app = FastAPI()
 
@@ -34,20 +37,40 @@ documents = {
 ## Documents -
 # all get
 @app.get("/documents")
-async def get_documents():
+async def get_documents(pmcid: str = None):
+    if pmcid:
+        docs = documents["results"]
+        for doc in docs:
+            if doc["pmcId"] == pmcid:
+                return doc
+        return {"error": f"Doc {pmcid} not found"}, 404
     return documents
 
-# single get
-@app.get("/documents/{pmc_id}")
-async def get_document(pmc_id: str):
-    docs = documents["results"]
-    for doc in docs:
-        # If this document has the PMC ID we're looking for
-        if doc["pmcId"] == pmc_id:
-            # Return this document
-            return doc
-        
-    return {"error": f"Doc {pmc_id} not found"}, 404
+# Specific topic ID get
+# HW 3 - add external API Call
+# ex: /documents/random?topic=stroke
+@app.get("/documents/random")
+async def search_documents(topic: str = ""):
+    rand_num = random.randint(1, 100)
+    pmc_id_query = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pmc&term={topic}&retmax={rand_num}&retmode=json"
+    response = requests.get(pmc_id_query)
+    data = response.json()
+    pmc_ids = data["esearchresult"]["idlist"]
+
+    rand_pmc_id = random.randint(0, len(pmc_ids) - 1)
+    pmc_id = pmc_ids[rand_pmc_id]
+
+    article_for_id = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pmc&id={pmc_id}&retmode=json"
+    response = requests.get(article_for_id)
+    article_data = response.json()
+    article = article_data["result"][pmc_id]
+    title = article["title"]
+
+    article_and_id = {
+        "pmcId": pmc_id,
+        "title": title
+    }
+    return article_and_id
 
 # add a doc
 @app.post("/documents")
