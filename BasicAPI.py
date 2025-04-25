@@ -3,12 +3,48 @@
 # HW3 - External API Call
 # 3 Example endpoints - Documents, Users, Annotations
 
+from typing import List
 from fastapi import FastAPI
 from pydantic import BaseModel
 import requests
 import random
 
+from sqlalchemy.orm import sessionmaker, declarative_base, Session
+from sqlalchemy import Column, Integer, String, create_engine
+
 app = FastAPI()
+
+# ---------- SQLite Setup ----------
+SQLALCHEMY_DATABASE_URL = "sqlite:///./pubmed.db"
+engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
+SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+Base = declarative_base()
+
+# ---------- SQLite Setup ----------
+class DocumentDB(Base):
+    __tablename__ = "documents"
+    pmcId = Column(String, primary_key=True, index=True)
+    title = Column(String)
+
+class UserDB(Base):
+    __tablename__ = "users"
+    id = Column(String, primary_key=True, index=True)
+    username = Column(String)
+    email = Column(String)
+    first_name = Column(String)
+    last_name = Column(String)
+    institution = Column(String)
+
+class AnnotationDB(Base):
+    __tablename__ = "annotations"
+    id = Column(String, primary_key=True, index=True)
+    pmc_id = Column(String)
+    user_id = Column(String)
+    page_number = Column(Integer)
+    ai_summary = Column(String)
+
+# Create the tables in the database
+Base.metadata.create_all(bind=engine)
 
 class Document(BaseModel):
     pmcId: str
@@ -46,13 +82,15 @@ documents = {
 # all get
 @app.get("/documents")
 async def get_documents(pmcid: str = None):
-    if pmcid:
-        docs = documents["results"]
-        for doc in docs:
-            if doc.pmcId == pmcid:
+    with SessionLocal() as db:
+        if pmcid:
+            doc = db.query(DocumentDB).filter(DocumentDB.pmcId == pmcid).first()
+            if doc:
                 return doc
-        return {"error": f"Doc {pmcid} not found"}, 404
-    return documents
+            return {"error": f"Doc {pmcid} not found"}, 404
+        docs = db.query(DocumentDB).all()
+        return docs
+    
 
 # Specific topic ID get
 # HW 3 - add external API Call
@@ -83,31 +121,37 @@ async def search_documents(topic: str = ""):
 # add a doc
 @app.post("/documents")
 async def add_document(doc: Document):
-    pmc_id = doc.pmcId
-    # Check if doc already exist - update it instead of creating duplicate
-    for i, existing_doc in enumerate(documents["results"]):
-        if existing_doc.pmcId == pmc_id:
-            documents["results"][i] = doc
-            return {"message": f"Document {pmc_id} was successfully updated."}
-    
-    documents["results"].append(doc)
-    return {"message": f"Document {pmc_id} was successfully Added."}
+    with SessionLocal() as db:
+        # Check if the document already exists in the database
+        existing_doc = db.query(DocumentDB).filter(DocumentDB.pmcId == doc.pmcId).first()
+        if existing_doc:
+            # Update the existing document
+            existing_doc = doc
+            db.commit()
+            return {"message": f"Document {doc.pmcId} was successfully updated."}
+        
+        # Add the new document to the database
+        new_doc = DocumentDB(**doc.model_dump())
+        db.add(new_doc)
+        db.commit()
+        return {"message": f"Document {doc.pmcId} was successfully added."}
 
 # delete a doc
 @app.delete("/documents")
 async def delete_document(pmc_id: str):
     # Find doc to remove
-    for i, existing_doc in enumerate(documents["results"]):
-        if existing_doc.pmcId == pmc_id:
-            documents["results"].pop(i)
+    with SessionLocal() as db:
+        existing_doc = db.query(DocumentDB).filter(DocumentDB.pmcId == pmc_id).first()
+        if existing_doc:
+            db.delete(existing_doc)
+            db.commit()
             return {"message": f"Document {pmc_id} was successfully deleted"}
-        
+    # If doc not found, return error
     return {"error": f"Document {pmc_id} not found"}, 404
 
-    
+
 
 ## Users -
-
 class User(BaseModel):
     id: str
     username: str
@@ -143,44 +187,52 @@ users = {
 
 # Get all user
 @app.get("/users")
-async def get_users():
-    return users
+async def get_users(response_model=User):
+    with SessionLocal() as db:
+        all_users = db.query(UserDB).all()
+        return all_users
+
 
 # single user get
-@app.get("/users")
-async def get_user(user_id: str):
-    all_users = users["users"]
-    for user in all_users:
-        if user.id == user_id:
+@app.get("/user")
+async def get_user(user_id: str, response_model=User):
+    with SessionLocal() as db:
+        user = db.query(UserDB).filter(UserDB.id == user_id).first()
+        if user:
             return user
-        
     return {"error": f"User {user_id} not found"}, 404
 
 # add new user
 @app.post("/users")
 async def add_user(user: User):
     user_id = user.id
-    # Check if user already exist - update user instead of creating duplicate
-    for i, existing_user in enumerate(users["users"]):
-        if existing_user.id == user_id:
-            users["users"][i] = user
+    with SessionLocal() as db:
+        # Check if the user already exists in the database
+        existing_user = db.query(UserDB).filter(UserDB.id == user_id).first()
+        if existing_user:
+            # Update the existing user
+            existing_user = user
+            db.commit()
             return {"message": f"User {user_id} was successfully updated."}
         
-    users["users"].append(user)
-    return {"message": f"User {user_id} was successfully added."}
+        # Add the new user to the database
+        new_user = UserDB(**user.model_dump())
+        db.add(new_user)
+        db.commit()
+        return {"message": f"User {user_id} was successfully added."}
 
 # delete a user
 @app.delete("/users")
 async def delete_user(user_id: str):    
-    # Find the user to remove
-    for i, existing_user in enumerate(users["users"]):
-        if existing_user.id == user_id:
-            users["users"].pop(i)
+
+    with SessionLocal() as db:
+        # Find the user to remove
+        existing_user = db.query(UserDB).filter(UserDB.id == user_id).first()
+        if existing_user:
+            db.delete(existing_user)
+            db.commit()
             return {"message": f"User {user_id} was successfully deleted"}
-    
     return {"error": f"User {user_id} not found"}, 404
-
-
 
 ## Annotations - 
 
@@ -210,35 +262,42 @@ annotations = {
 
 # single annotation get
 @app.get("/annotations")
-async def get_annotation(anno_id: str):
-    all_annos = annotations["annotations"]
-    for anno in all_annos:
-        if anno.id == anno_id:
-            return anno
-        
+async def get_annotation(anno_id: str, response_model=Annotation):
+    with SessionLocal() as db:
+        # Find the annotation in the database
+        existing_anno = db.query(AnnotationDB).filter(AnnotationDB.id == anno_id).first()
+        if existing_anno:
+            return existing_anno
     return {"error": f"Annotation {anno_id} not found"}, 404
 
 # add new annotation
 @app.post("/annotations")
 async def add_annotation(anno: Annotation):
     anno_id = anno.id
-    # Check if user already exist - update user instead of creating duplicate
-    for i, existing_anno in enumerate(annotations["annotations"]):
-        if existing_anno.id == anno_id:
-            annotations["users"][i] = anno
+    with SessionLocal() as db:
+        # Check if the annotation already exists in the database
+        existing_anno = db.query(AnnotationDB).filter(AnnotationDB.id == anno_id).first()
+        if existing_anno:
+            # Update the existing annotation
+            existing_anno = anno
+            
+            db.commit()
             return {"message": f"Annotation {anno_id} was successfully updated."}
         
-    annotations["annotations"].append(anno)
-    return {"message": f"Annotation {anno_id} was successfully added."}
+        # Add the new annotation to the database
+        new_anno = AnnotationDB(**anno.model_dump())
+        db.add(new_anno)
+        db.commit()
+        return {"message": f"Annotation {anno_id} was successfully added."}
 
 # delete annotation
 @app.delete("/annotations")
 async def delete_annotation(anno_id: str):    
     # Find the annotation to remove
-    for i, existing_anno in enumerate(annotations["annotations"]):
-        if existing_anno.id == anno_id:
-            user_id = existing_anno.user_id
-            annotations["annotations"].pop(i)
-            return {"message": f"Annotation {anno_id} successfully deleted for user {user_id}"}
-    
+    with SessionLocal() as db:
+        existing_anno = db.query(AnnotationDB).filter(AnnotationDB.id == anno_id).first()
+        if existing_anno:
+            db.delete(existing_anno)
+            db.commit()
+            return {"message": f"Annotation {anno_id} was successfully deleted"}
     return {"error": f"Annotation {anno_id} not found"}, 404
