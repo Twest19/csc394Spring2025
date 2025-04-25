@@ -4,21 +4,29 @@
 # 3 Example endpoints - Documents, Users, Annotations
 
 from fastapi import FastAPI
+from pydantic import BaseModel
 import requests
 import random
 
 app = FastAPI()
 
-document_one = {
-    "pmcId": "11970135",
-    "title": "Hand-to-surface bacterial transfer and healthcare-associated "
-    "infections prevention: a pilot study on skin microbiome in a molecular biology laboratory "
-}
+class Document(BaseModel):
+    pmcId: str
+    title: str
 
-document_two = {
-    "pmcId": "40193249",
-    "title": "Management of Staphylococcus aureus Bacteremia: A Review "
-}
+    class Config:
+        orm_mode = True
+
+
+document_one = Document(
+    pmcId="11970135",
+    title="Hand-to-surface bacterial transfer and healthcare-associated "
+    "infections prevention: a pilot study on skin microbiome in a molecular biology laboratory "
+)
+
+document_two = Document(
+    pmcId="40193249",
+    title="Management of Staphylococcus aureus Bacteremia: A Review")
 
 # Mock Data
 documents = {
@@ -41,7 +49,7 @@ async def get_documents(pmcid: str = None):
     if pmcid:
         docs = documents["results"]
         for doc in docs:
-            if doc["pmcId"] == pmcid:
+            if doc.pmcId == pmcid:
                 return doc
         return {"error": f"Doc {pmcid} not found"}, 404
     return documents
@@ -74,11 +82,11 @@ async def search_documents(topic: str = ""):
 
 # add a doc
 @app.post("/documents")
-async def add_document(doc: dict):
-    pmc_id = doc["pmcId"]
+async def add_document(doc: Document):
+    pmc_id = doc.pmcId
     # Check if doc already exist - update it instead of creating duplicate
     for i, existing_doc in enumerate(documents["results"]):
-        if existing_doc["pmcId"] == pmc_id:
+        if existing_doc.pmcId == pmc_id:
             documents["results"][i] = doc
             return {"message": f"Document {pmc_id} was successfully updated."}
     
@@ -86,11 +94,11 @@ async def add_document(doc: dict):
     return {"message": f"Document {pmc_id} was successfully Added."}
 
 # delete a doc
-@app.delete("/documents/{pmc_id}")
+@app.delete("/documents")
 async def delete_document(pmc_id: str):
     # Find doc to remove
     for i, existing_doc in enumerate(documents["results"]):
-        if existing_doc["pmcId"] == pmc_id:
+        if existing_doc.pmcId == pmc_id:
             documents["results"].pop(i)
             return {"message": f"Document {pmc_id} was successfully deleted"}
         
@@ -99,50 +107,62 @@ async def delete_document(pmc_id: str):
     
 
 ## Users -
-user = {
-    "id": "user_123",
-    "username": "researcher123",
-    "email": "jdoe@depaul.edu",
-    "first_name": "John",
-    "last_name": "Doe",
-    "institution": "DePaul University",
-}
 
-user2 = {
-    "id": "user_444",
-    "username": "someuser444",
-    "email": "janedoe@depaul.edu",
-    "first_name": "Jane",
-    "last_name": "Doe",
-    "institution": "DePaul University",
-}
+class User(BaseModel):
+    id: str
+    username: str
+    email: str
+    first_name: str
+    last_name: str
+    institution: str
+
+    class Config:
+        orm_mode = True
+
+
+user = User(
+    id="user_123",
+    username="researcher123",
+    email="jdoe@depaul.edu",
+    first_name="John",
+    last_name="Doe",
+    institution="DePaul University")
+
+user2 = User(
+    id="user_444",
+    username="researcher444",
+    email= "janedoe@depaul.edu",
+    first_name="Jane",
+    last_name="Doe",
+    institution="DePaul University"
+)
 
 users = {
     "users" : [user, user2]
 }
 
 # Get all user
-@app.get("/users/")
+@app.get("/users")
 async def get_users():
     return users
 
 # single user get
-@app.get("/users/{user_id}")
+@app.get("/users")
 async def get_user(user_id: str):
     all_users = users["users"]
     for user in all_users:
-        if user["id"] == user_id:
+        if user.id == user_id:
             return user
         
     return {"error": f"User {user_id} not found"}, 404
 
 # add new user
-@app.post("/users/")
-async def add_user(user: dict):
-    user_id = user["id"]
+@app.post("/users")
+async def add_user(user: User):
+    user_id = user.id
     # Check if user already exist - update user instead of creating duplicate
     for i, existing_user in enumerate(users["users"]):
-        if existing_user["id"] == user_id:
+        if existing_user.id == user_id:
             users["users"][i] = user
             return {"message": f"User {user_id} was successfully updated."}
         
@@ -150,11 +170,11 @@ async def add_user(user: dict):
     return {"message": f"User {user_id} was successfully added."}
 
 # delete a user
-@app.delete("/users/{user_id}")
+@app.delete("/users")
 async def delete_user(user_id: str):    
     # Find the user to remove
     for i, existing_user in enumerate(users["users"]):
-        if existing_user["id"] == user_id:
+        if existing_user.id == user_id:
             users["users"].pop(i)
             return {"message": f"User {user_id} was successfully deleted"}
     
@@ -163,13 +183,24 @@ async def delete_user(user_id: str):
 
 
 ## Annotations - 
-annotation = {
-    "id": "anno_456789",
-    "pmc_id": "11970135",
-    "user_id": "user_123",
-    "page_number": 1,
-    "ai_summary": "Example Summary of document"
-}
+
+class Annotation(BaseModel):
+    id: str
+    pmc_id: str
+    user_id: str
+    page_number: int
+    ai_summary: str
+
+    class Config:
+        orm_mode = True
+
+
+annotation = Annotation(
+    id="anno_456789",
+    pmc_id="11970135",
+    user_id="user_123",
+    page_number=1,
+    ai_summary="Example Summary of document")
 
 annotations = {
     "annotations" : [
@@ -178,22 +209,22 @@ annotations = {
 }
 
 # single annotation get
-@app.get("/annotations/{anno_id}")
+@app.get("/annotations")
 async def get_annotation(anno_id: str):
     all_annos = annotations["annotations"]
     for anno in all_annos:
-        if anno["id"] == anno_id:
+        if anno.id == anno_id:
             return anno
         
     return {"error": f"Annotation {anno_id} not found"}, 404
 
 # add new annotation
-@app.post("/annotations/")
-async def add_annotation(anno: dict):
-    anno_id = anno["id"]
+@app.post("/annotations")
+async def add_annotation(anno: Annotation):
+    anno_id = anno.id
     # Check if user already exist - update user instead of creating duplicate
     for i, existing_anno in enumerate(annotations["annotations"]):
-        if existing_anno["id"] == anno_id:
+        if existing_anno.id == anno_id:
             annotations["users"][i] = anno
             return {"message": f"Annotation {anno_id} was successfully updated."}
         
@@ -201,13 +232,13 @@ async def add_annotation(anno: dict):
     return {"message": f"Annotation {anno_id} was successfully added."}
 
 # delete annotation
-@app.delete("/annotations/{anno_id}")
+@app.delete("/annotations")
 async def delete_annotation(anno_id: str):    
     # Find the annotation to remove
     for i, existing_anno in enumerate(annotations["annotations"]):
-        if existing_anno["id"] == anno_id:
+        if existing_anno.id == anno_id:
+            user_id = existing_anno.user_id
             annotations["annotations"].pop(i)
-            user_id = existing_anno["user_id"]
-            return {"message": f"Annotation deleted {anno_id} successfully deleted for user {user_id}"}
+            return {"message": f"Annotation {anno_id} successfully deleted for user {user_id}"}
     
     return {"error": f"Annotation {anno_id} not found"}, 404
