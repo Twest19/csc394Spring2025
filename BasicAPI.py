@@ -5,6 +5,7 @@
 
 from typing import List
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import requests
 import random
@@ -13,6 +14,14 @@ from sqlalchemy.orm import sessionmaker, declarative_base, Session
 from sqlalchemy import Column, Integer, String, create_engine
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # ---------- SQLite Setup ----------
 SQLALCHEMY_DATABASE_URL = "sqlite:///./pubmed.db"
